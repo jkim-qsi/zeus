@@ -247,9 +247,9 @@ class remoteFrameListener(can.Listener):
         return 0
 
     def parseMsgID(self, id, field):
-        if field is "r":
+        if field == "r":
             return id & RECEIVER_ID_MASK
-        elif field is "s":
+        elif field == "s":
             return (id & SENDER_ID_MASK) >> 5
         else:
             return 0
@@ -366,7 +366,7 @@ class ZeusModule(object):
         identifier |= self.id
         if(master_id > 0):
             identifier |= (master_id << 5)
-        if msg_type is 'kick':
+        if msg_type == 'kick':
             identifier |= 1 << 10
         return identifier
 
@@ -506,9 +506,9 @@ class ZeusModule(object):
     def initCANBus(self):
         printMSG(
             "info", "ZeusModule {}: initializing CANBus...".format(self.id))
-        can.rc['interface'] = 'socketcan_ctypes'
-        can.rc['channel'] = 'can0'
-        self.CANBus = can.interface.Bus()
+        # can.rc['interface'] = 'socketcan_ctypes'
+        # can.rc['channel'] = 'can0'
+        self.CANBus = can.interface.Bus(interface='usb2can')
         #  self.CANBus = can.interface.Bus(can_filters=[{"can_id": 0x01,
                                                       #  "can_mask": 0xFF}])
 
