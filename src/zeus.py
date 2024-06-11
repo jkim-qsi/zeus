@@ -88,6 +88,19 @@ class DeckGeometry(object):
 
 
 class LiquidClass(object):
+    '''
+        Times are in units of 0.1s
+        Flow rates in units of 0.1uL/s
+        Speed in units of 0.1 mm/s
+        
+        liquidClassForFilterTips: 0-no filter, 1-has filter
+        aspiration mode: 0: simple, 1: empty cup, 2: consecutive
+        lld (liquid level detection): 0: cLLD, 1: pLLD
+        clldSensitivity: 1-4, 1: very high, 2: high, 3: medium, 4: low
+        plldSensitivity: 1-4, 1: very high, 2: high, 3: medium, 4: low
+        adc (Anti-droplet control): 0: off, 1: on
+        dispensingMode: 0: jet empty, 1: jet part, 2: surface empty, 3: surface part
+    '''
 
     def __init__(self, id=0, index=None, liquidClassForFilterTips=0,
                  aspirationMode=0, aspirationFlowRate=0, overAspiratedVolume=0,
@@ -123,6 +136,25 @@ class LiquidClass(object):
         self.dispensingSettlingTime = dispensingSettlingTime
         self.flowRateTransportVolume = flowRateTransportVolume
 
+class calibrationCurve(object):
+    '''
+        index: index of intended liquid class
+        direction: 'aspirate' or 'dispense'
+        target_volumes: list of 8 points of target volumes
+        actual_volumes: list of 8 points of actual measured volumes, default values from Liquid Class 1: Water Jet Empty with 300uL tip cLLD
+    '''
+    def __init__(self, id=0, index=None, direction='aspirate', \
+                 target_volumes =  [0, 50, 100, 200, 500, 1000, 2000, 3000], \
+                 actual_volumes = [0, 64, 122, 232, 548, 1068, 2095, 3113]):
+        if index is None:
+            raise ValueError(
+                "Cannot initialize calibrationCurve instance with unspecified index.")    
+        self.id = id
+        self.index = index
+        self.direction = direction
+        self.target_volumes = target_volumes
+        self.actual_volumes = actual_volumes
+        
 
 class remoteFrameListener(can.Listener):
 
@@ -177,14 +209,15 @@ class remoteFrameListener(can.Listener):
         # Ignore the messages that we've sent out
             if self.parseMsgID(msg.arbitration_id, "r") == 1:
                 return
-
+            print(self.received_msg)
+            print(msg.data)
             #print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
             if(self.msg_complete_flag == 1):
                 self.received_msg = ""
                 self.msg_complete_flag = 0
 
             #self.received_msg += msg.data.replace(" ", "")[:-1]
-            self.received_msg += msg.data.replace(" ", "")
+            self.received_msg += str(msg.data).replace(" ", "")
 
             if(self.msg_is_last(msg) == 0):
                 if self.parent.auto_response:
@@ -347,17 +380,20 @@ class ZeusModule(object):
         self.initCANBus()
         self.pos = 0
         self.minZPosition = 0
-        self.maxZPosition = 1800
+        self.maxZPosition = 2500
         self.r = remoteFrameListener(self)
         self.remoteFrameNotifier = can.Notifier(self.CANBus, [self.r])
         # print("ZeusModule {}: initializing...".format(self.id))
         logging.info("ZeusModule {}: initializing...".format(self.id))
-        cmd = self.cmdHeader('RF')
-        print(cmd)
-        self.sendCommand(cmd)
+        # cmd = self.cmdHeader('RF')
+        # cmd = "RF"
+        # print(cmd)
+        # self.sendCommand(cmd)
         if init_module:
             self.initZDrive()
-            self.initDosingDrive()
+            sleep(1.0)
+            self.initDosingDrive(discard_tip=False)
+            sleep(1.0)
 
     def setAutoResponse(self, auto):
         self.auto_response = auto
@@ -483,12 +519,12 @@ class ZeusModule(object):
             # data += " "
             # data += bytearray(" ".encode('ascii'))
             data += bytearray([0])
-            print(data)
+            # print(data)
         # APPEND CONTROL BYTE
         # data+= chr(byte)
         
         # data += bytearray(chr(byte).encode('ascii'))        
-        print('byte={} in hex={}'.format(byte, bytearray(byte).hex()))
+        # print('byte={} in hex={}'.format(byte, bytearray(byte).hex()))
         # print(bytearray(chr(byte).encode('ascii')).hex())
         data += bytearray([byte])
         # print(data)
@@ -508,6 +544,9 @@ class ZeusModule(object):
             printMSG("error", "Message not sent!")
 
     def sendCommand(self, cmd):
+        '''
+        cmd: command in str type ex. "ZI", "RF"
+        '''
         data = list(split_by_n(cmd, 7))
         print(data)
         cmd_len = len(data)
@@ -546,21 +585,26 @@ class ZeusModule(object):
         #  self.CANBus = can.interface.Bus(can_filters=[{"can_id": 0x01,
                                                       #  "can_mask": 0xFF}])
 
-    def initDosingDrive(self):
-        cmd = self.cmdHeader('DI')
+    def initDosingDrive(self, discard_tip=False):
+        # cmd = self.cmdHeader('DI')
+        cmd = 'DI'
+        if not discard_tip:
+            cmd += 'oo1'
         printMSG(
             "info", "ZeusModule {}: initializing dosing drive...".format(self.id))
         self.sendCommand(cmd)
 
     def initZDrive(self):
-        cmd = self.cmdHeader('ZI')
+        # cmd = self.cmdHeader('ZI')
+        cmd = "ZI"
         printMSG(
             "info", "ZeusModule {}: initializing z-drive...".format(self.id))
         self.pos = self.maxZPosition
         self.sendCommand(cmd)
 
     def moveZDrive(self, pos, speed):
-        cmd = self.cmdHeader('GZ')
+        # cmd = self.cmdHeader('GZ')
+        cmd = 'GZ'
         if (pos > self.maxZPosition) or (pos < self.minZPosition):
             raise ValueError(
                 "ZeusModule {}: requested z-position out of range. "
@@ -583,14 +627,16 @@ class ZeusModule(object):
         self.sendCommand(cmd)
 
     def pickUpTip(self, tipTypeTableIndex, deckGeometryTableIndex):
-        cmd = self.cmdHeader('GT')
+        # cmd = self.cmdHeader('GT')
+        cmd = 'GT'
         cmd = cmd + 'tt' + str(tipTypeTableIndex).zfill(
             2) + 'go' + str(deckGeometryTableIndex).zfill(2)
 
         self.sendCommand(cmd)
 
     def discardTip(self, deckGeometryTableIndex):
-        cmd = self.cmdHeader('GU')
+        # cmd = self.cmdHeader('GU')
+        cmd = 'GU'
         cmd = cmd + 'go' + str(deckGeometryTableIndex).zfill(2)
         self.sendCommand(cmd)
 
@@ -602,7 +648,8 @@ class ZeusModule(object):
                    deckGeometryTableIndex=0, liquidClassTableIndex=0, qpm=0,
                    lld=0, lldSearchPosition=0, liquidSurface=0, mixVolume=0,
                    mixFlowRate=0, mixCycles=0):
-        cmd = self.cmdHeader('GA')
+        # cmd = self.cmdHeader('GA')
+        cmd = 'GA'
         cmd = cmd + 'ai' + str(aspirationVolume).zfill(5) +\
             'ge' + str(containerGeometryTableIndex).zfill(2) +\
             'go' + str(deckGeometryTableIndex).zfill(2) +\
@@ -620,7 +667,8 @@ class ZeusModule(object):
                    deckGeometryTableIndex=0, qpm=0, liquidClassTableIndex=0,
                    lld=0, lldSearchPosition=0, liquidSurface=0,
                    searchBottomMode=0, mixVolume=0, mixFlowRate=0, mixCycles=0):
-        cmd = self.cmdHeader('GD')
+        # cmd = self.cmdHeader('GD')
+        cmd = 'GD'
         cmd = cmd + 'di' + str(dispensingVolume).zfill(4) +\
             'ge' + str(containerGeometryTableIndex).zfill(2) +\
             'go' + str(deckGeometryTableIndex).zfill(2) +\
@@ -635,15 +683,18 @@ class ZeusModule(object):
             'dn' + str(mixCycles).zfill(2)
         self.sendCommand(cmd)
 
-    def switchOff(self):
-        cmd = self.cmdHeader('AV')
-        self.sendCommand(cmd)
+    # Not available on Zeus X1
+    # def switchOff(self):
+    #     # cmd = self.cmdHeader('AV')
+    #     cmd = 'AV'
+    #     self.sendCommand(cmd)
 
     def calculateContainerVolume(self, containerGeometryTableIndex=0,
                                  deckGeometryTableIndex=0,
                                  liquidClassTableIndex=0, lld=0,
                                  lldSearchPosition=0, liquidSurface=0):
-        cmd = self.cmdHeader('GJ')
+        # cmd = self.cmdHeader('GJ')
+        cmd = 'GJ'
         cmd = cmd + 'ge' + str(containerGeometryTableIndex).zfill(2) +\
             'go' + str(deckGeometryTableIndex).zfill(2) +\
             'lq' + str(liquidClassTableIndex).zfill(2) +\
@@ -653,16 +704,18 @@ class ZeusModule(object):
         self.sendCommand(cmd)
 
     def calculateContainerVolumeAfterPipetting(self):
-        cmd = self.cmdHeader('GN')
+        # cmd = self.cmdHeader('GN')
+        cmd = 'GN'
         self.sendCommand(cmd)
 
     def getErrorCode(self):
-        cmd = self.cmdHeader('RE')
+        # cmd = self.cmdHeader('RE')
+        cmd = 'RE'
         self.sendCommand(cmd)
 
     def getFirmwareVersion(self):
         # cmd = self.cmdHeader('RF')
-        self.sendCommand("RFid001")
+        self.sendCommand("RFid")
         # self.sendCommand(cmd)
 
     def getParameterValue(self, parameterName):
@@ -671,45 +724,55 @@ class ZeusModule(object):
                 "ZeusModule {}: Invalid parameter \'{}\' requested. "
                 " Parameter format must be two lower-case letters."
                 .format(parameterName))
-        cmd = self.cmdHeader('RA')
+        # cmd = self.cmdHeader('RA')
+        cmd = 'RA'
         cmd = cmd + 'ra' + parameterName
         self.sendCommand(cmd)
 
     def getInstrumentInitializationStatus(self):
-        cmd = self.cmdHeader('QW')
+        # cmd = self.cmdHeader('QW')
+        cmd = 'QW'
         self.sendCommand(cmd)
 
     def getNameofLastFaultyParameter(self):
-        cmd = self.cmdHeader('VP')
+        # cmd = self.cmdHeader('VP')
+        cmd = 'VP'
         self.sendCommand(cmd)
 
     def getTipPresenceStatus(self):
-        cmd = self.cmdHeader('RT')
+        # cmd = self.cmdHeader('RT')
+        cmd = 'RT'
         self.sendCommand(cmd)
 
     def getTechnicalStatus(self):
-        cmd = self.cmdHeader('QT')
+        # cmd = self.cmdHeader('QT')
+        cmd = 'QT'
         self.sendCommand(cmd)
 
     def getAbsoluteZPosition(self):
-        cmd = self.cmdHeader('RZ')
+        # cmd = self.cmdHeader('RZ')
+        cmd = 'RZ'
         self.sendCommand(cmd)
 
     def getCycleCounter(self):
-        cmd = self.cmdHeader('RV')
+        # cmd = self.cmdHeader('RV')
+        cmd = 'RV'
         self.sendCommand(cmd)
 
     def getLifetimeCounter(self):
-        cmd = self.cmdHeader('RY')
+        # cmd = self.cmdHeader('RY')
+        cmd = 'RY'
         self.sendCommand(cmd)
 
     def getInstrumentStatus(self):
-        cmd = self.cmdHeader('RQ')
+        # cmd = self.cmdHeader('RQ')
+        cmd = 'RQ'
         self.sendCommand(cmd)
         pass
 
     def getLiquidClassRevision(self):
-        cmd = self.cmdHeader('XB')
+        # cmd = self.cmdHeader('XB')
+        cmd = 'XB'
         self.sendCommand(cmd)
         pass
 
@@ -717,11 +780,12 @@ class ZeusModule(object):
         if state in set([1, 'on', 'ON', 'True', 'true']):
             cmd = self.cmdHeader('AB')
         if state in set([0, 'off', 'OFF', 'False', 'false']):
-            cmd = seld.cmdHeader('AW')
+            cmd = self.cmdHeader('AW')
         self.sendCommand(cmd)
 
     def switchDigitalOutput(self, out1State, out2State):
-        cmd = self.cmdHeader('OU')
+        # cmd = self.cmdHeader('OU')
+        cmd = 'OU'
         cmd += 'ou'
         if out1State in set([1, 'on', 'ON', 'True', 'true']):
             cmd += str(1)
@@ -756,23 +820,28 @@ class ZeusModule(object):
         self.sendCommand(cmd)
 
     def setDosingDriveInCleaningPosition(self):
-        cmd = self.cmdHeader('GX')
+        # cmd = self.cmdHeader('GX')
+        cmd = 'GX'
         self.sendCommand(cmd)
 
     def setContainerGeometryParameters(self, containerGeometryParameters):
-        cmd = self.cmdHeader('GC')
+        '''
+        containerGeometryParameters
+        '''
+        # cmd = self.cmdHeader('GC')
+        cmd = 'GC'
         cmd = cmd + 'ge' + str(containerGeometryParameters.index).zfill(2) +\
             'cb' + str(containerGeometryParameters.diameter).zfill(3) +\
             'bg' + str(containerGeometryParameters.bottomHeight).zfill(4) +\
-            'gx' + str(ContainerGeometryParameters.bottomSection).zfill(5) +\
-            'ce' + str(ContainerGeometryParameters.bottomPosition).zfill(4) +\
-            'ie' + str(ContainerGeometryParameters.immersionDepth).zfill(4) +\
-            'yq' + str(ContainerGeometryParameters.leavingHeight).zfill(4) +\
-            'yr' + str(ContainerGeometryParameters.jetHeight).zfill(4) +\
+            'gx' + str(containerGeometryParameters.bottomSection).zfill(5) +\
+            'ce' + str(containerGeometryParameters.bottomPosition).zfill(4) +\
+            'ie' + str(containerGeometryParameters.immersionDepth).zfill(4) +\
+            'yq' + str(containerGeometryParameters.leavingHeight).zfill(4) +\
+            'yr' + str(containerGeometryParameters.jetHeight).zfill(4) +\
             'ch' +\
-            str(ContainerGeometryParameters.startOfHeightBottomSearch).zfill(4) +\
+            str(containerGeometryParameters.startOfHeightBottomSearch).zfill(4) +\
             'ci' +\
-            str(ContainerGeometryParameters.dispenseHeightAfterBottomSearch).zfill(
+            str(containerGeometryParameters.dispenseHeightAfterBottomSearch).zfill(
             4)
         self.sendCommand(cmd)
 
@@ -780,14 +849,16 @@ class ZeusModule(object):
         if index is None:
             raise ValueError(
                 "Please specify a valid container geometry table index.")
-        cmd = self.cmdHeader('GB')
+        # cmd = self.cmdHeader('GB')
+        cmd = 'GB'
         cmd = cmd + 'ge' + str(index).zfill(2)
         ret = ContainerGeometry(index=index)
         # Request and fill class attributes here
         return ret
 
     def setDeckGeometryParameters(self, deckGeometryParameters):
-        cmd = self.cmdHeader('GO')
+        # cmd = self.cmdHeader('GO')
+        cmd = 'GO'
         cmd = cmd + 'go' + str(deckGeometryParameters.index).zfill(2) +\
             'te' + str(deckGeometryParameters.endTraversePosition).zfill(4) +\
             'tm' +\
@@ -801,7 +872,8 @@ class ZeusModule(object):
         if index is None:
             raise ValueError(
                 "Please specify a valid deck geometry table index.")
-        cmd = self.cmdHeader('GR')
+        # cmd = self.cmdHeader('GR')
+        cmd = 'GR'
         cmd = cmd + 'go' + str(index).zfill(2)
         self.sendCommmand(cmd)
 
@@ -809,38 +881,83 @@ class ZeusModule(object):
         if liquidClassParameters.index is None:
             raise ValueError(
                 "Please specify a valid deck geometry table index.")
-        cmd = self.cmdHeader('GL')
+        # cmd = self.cmdHeader('GL')
+        cmd = 'GL'
         cmd = cmd + 'id' + str(liquidClassParameters.id).zfill(4) +\
             'lq' + str(liquidClassParameters.index).zfill(2) +\
-            'uu' + str(liquidClassParameters.liquidClassForFilterTips) +\
-            str(liquidClassParameters.aspirationMode) +\
-            str(liquidClassParameters.aspirationFlowRate).zfill(5) +\
-            str(liquidClassParameters.overAspiratedVolume).zfill(4) +\
-            str(liquidClassParameters.aspirationTransportVolume).zfill(5) +\
-            str(liquidClassParameters.blowoutAirVolume).zfill(5) +\
-            str(liquidClassParameters.aspirationSwapSpeed).zfill(4) +\
-            str(liquidClassParameters.aspirationSettlingTime).zfill(3) +\
-            str(liquidClassParameters.lld) +\
-            str(liquidClassParameters.clldSensitivity) +\
-            str(liquidClassParameters.plldSensitivity) +\
-            str(liquidClassParameters.adc) +\
-            str(liquidClassParameters.dispensingMode) +\
-            str(liquidClassParameters.dispensingFlowRate).zfill(5) +\
-            str(liquidClassParameters.stopFlowRate).zfill(5) +\
-            str(liquidClassParameters.stopBackVolume).zfill(3) +\
-            str(liquidClassParameters.dispensingTransportVolume).zfill(5) +\
-            str(liquidClassParameters.acceleration).zfill(3) +\
-            str(liquidClassParameters.dispensingSwapSpeed).zfill(4) +\
-            str(liquidClassParameters.dispensingSettlingTime).zfill(3) +\
-            str(liquidClassParameters.flowRateTransportVolume).zfill(5)
+            'uu' + str(liquidClassParameters.liquidClassForFilterTips) + ' ' +\
+            str(liquidClassParameters.aspirationMode) + ' ' + \
+            str(liquidClassParameters.aspirationFlowRate).zfill(5) + ' ' + \
+            str(liquidClassParameters.overAspiratedVolume).zfill(4) + ' ' + \
+            str(liquidClassParameters.aspirationTransportVolume).zfill(5) + ' ' + \
+            str(liquidClassParameters.blowoutAirVolume).zfill(5) + ' ' +\
+            str(liquidClassParameters.aspirationSwapSpeed).zfill(4) + ' ' +\
+            str(liquidClassParameters.aspirationSettlingTime).zfill(3) + ' ' +\
+            str(liquidClassParameters.lld) + ' ' + \
+            str(liquidClassParameters.clldSensitivity) + ' ' + \
+            str(liquidClassParameters.plldSensitivity) + ' ' + \
+            str(liquidClassParameters.adc) + ' ' + \
+            str(liquidClassParameters.dispensingMode) + ' ' +\
+            str(liquidClassParameters.dispensingFlowRate).zfill(5) + ' ' +\
+            str(liquidClassParameters.stopFlowRate).zfill(5) + ' ' + \
+            str(liquidClassParameters.stopBackVolume).zfill(3) + ' ' + \
+            str(liquidClassParameters.dispensingTransportVolume).zfill(5) + ' ' + \
+            str(liquidClassParameters.dispensingSwapSpeed).zfill(4) + ' ' + \
+            str(liquidClassParameters.dispensingSettlingTime).zfill(3) 
         self.sendCommand(cmd)
 
     def getLiquidClassParameters(self, id, index):
-        cmd = self.cmdHeader('GM')
+        # cmd = self.cmdHeader('GM')
+        cmd = 'GM'
         cmd = cmd + 'id' + str(id).zfill(4) +\
             'iq' + str(index).zfill(2)
         self.sendCommand(cmd)
-
+        
+    def setCalibrationCurveParameters(self, calibrationCurveParameters):
+        # TODO: check calibrationCurveParameters validity
+        if calibrationCurveParameters.direction == 'aspirate':
+            cmd = 'GG' + 'gg' + str(calibrationCurveParameters.index).zfill(2) + 'ck'
+        elif calibrationCurveParameters.direction == 'dispense':
+            cmd = 'GH' + 'gh' + str(calibrationCurveParameters.index).zfill(2) + 'cl'
+        cal_curve = []
+        for idx in range(len(calibrationCurveParameters.target_volumes)):
+            cal_curve.append(str(calibrationCurveParameters.target_volumes[idx]).zfill(5))
+            cal_curve.append(str(calibrationCurveParameters.actual_volumes[idx]).zfill(5))
+        cmd += ' '.join(cal_curve)
+        
+        self.sendCommand(cmd)
+    
+    def bottomSearch(self, start, stop):
+        # '01SBsa1700sb2500'
+        cmd = 'SB'
+        cmd += 'sa' + str(start).zfill(4) + \
+               'sb' + str(stop).zfill(4)
+        self.sendCommand(cmd)
+    
+    def simpleAspirate(self, volume, flowrate=0):
+        '''
+            volume: 0-10000 in 0.1 uL 
+            flowrate: 1-14280 in 0.1uL/s
+        '''
+        cmd = 'SA'
+        cmd += 'ai' + str(volume).zfill(5)
+        if flowrate > 0: 
+            cmd += 'aj' + str(flowrate).zfill(5)
+            
+        self.sendCommand(cmd)
+        
+    def simpleDispense(self, volume, flowrate=0):
+        '''
+            volume: 0-10000 in 0.1 uL 
+            flowrate: 1-14280 in 0.1uL/s
+        '''
+        cmd = 'SD'
+        cmd += 'di' + str(volume).zfill(5)
+        if flowrate > 0: 
+            cmd += 'ae' + str(flowrate).zfill(5)
+            
+        self.sendCommand(cmd)
+        
     def firmwareUpdate(self, filename):
         pass
 
