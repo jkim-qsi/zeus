@@ -6,7 +6,7 @@ from time import sleep
 
 os.add_dll_directory(R"C:\Users\Lab\Downloads\usb2can_canal_v2.0.0\usb2can_canal_v2.0.0\x64\Release")
 
-zm = zeus.ZeusModule(1)
+zm = zeus.ZeusModule(1, init_module=False)
 # ez = ezstepper.EZStepper(1)
 
 

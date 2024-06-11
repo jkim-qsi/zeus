@@ -1,5 +1,5 @@
-import zeus
-import ezstepper
+import src.zeus as zeus
+import src.ezstepper as ezstepper
 from time import sleep
 
 zm = zeus.ZeusModule(1)

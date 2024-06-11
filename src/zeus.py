@@ -6,9 +6,10 @@ from time import sleep
 from colorama import init, Fore, Back, Style
 from threading import Thread, Lock
 import sys
+import traceback
 
 
-DEBUG = 0
+DEBUG = 1
 INFO = 1
 WARNING = 1
 ERROR = 1
@@ -147,7 +148,7 @@ class remoteFrameListener(can.Listener):
                 #  return
             if(self.getRemoteFlag() == 0):
                 self.setRemoteFlag(1)
-                printMSG("info", "Received remote frame with ID = {}, DLC = {}.".format(
+                printMSG("info", "Received remote frame with ID = {}, DLC = {}.\n".format(
                     self.parseMsgID(msg.arbitration_id, "s"), msg.dlc))
                 #  print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
             return
@@ -351,6 +352,9 @@ class ZeusModule(object):
         self.remoteFrameNotifier = can.Notifier(self.CANBus, [self.r])
         # print("ZeusModule {}: initializing...".format(self.id))
         logging.info("ZeusModule {}: initializing...".format(self.id))
+        cmd = self.cmdHeader('RF')
+        print(cmd)
+        self.sendCommand(cmd)
         if init_module:
             self.initZDrive()
             self.initDosingDrive()
@@ -359,7 +363,8 @@ class ZeusModule(object):
         self.auto_response = auto
 
     def cmdHeader(self, command):
-        return command + "id" + str(self.id).zfill(4)
+        # return command + "id" + str(self.id).zfill(4)
+        return str(self.id).zfill(2) + command
 
     def assembleIdentifier(self, msg_type, master_id=0):
         identifier = 0
@@ -373,7 +378,7 @@ class ZeusModule(object):
     def sendRemoteFrame(self, dlc):
             # SEND REMOTE FRAME
         msg = can.Message(
-            extended_id=False,
+            is_extended_id=False,
             is_remote_frame=True,
             arbitration_id=0x0020)
         msg.dlc = dlc
@@ -382,7 +387,7 @@ class ZeusModule(object):
         # print(Fore.GREEN + "{}".format(msg) + Style.RESET_ALL)
         try:
             self.CANBus.send(msg)
-        except can.canError:
+        except can.exceptions.CanError:
             print(
                 Fore.RED + "ERROR: Remote frame not sent!" + Style.RESET_ALL)
 
@@ -402,7 +407,7 @@ class ZeusModule(object):
     def sendKickFrame(self):
         n = 0
         msg = can.Message(
-            extended_id=False,
+            is_extended_id=False,
                 arbitration_id=self.assembleIdentifier('kick'), data=0)
         printMSG("info",
                  "ZeusModule, {}: sending kick frame...".format(self.id))
@@ -410,7 +415,7 @@ class ZeusModule(object):
         while (n < self.transmission_retries):
             try:
                 self.CANBus.send(msg)
-            except can.canError:
+            except can.exceptions.CanError:
                 printMSG("error", "Kick not sent!")
 
              # WAIT FOR REMOTE RESPONSE
@@ -441,11 +446,25 @@ class ZeusModule(object):
         return 0
 
     def sendDataObject(self, i, cmd_len, data):
+        '''
+        i: frame number
+        cmd_len: length of command
+        data: bytearray of command
+        
+        '''
+        
         byte = 0
         printMSG(
             "info", "ZeusModule {}: sending data frame {} of {}...".format(self.id, i + 1, cmd_len))
-        printMSG(
-            "debug", "data pre append = {}".format(data.encode('hex')))
+        try:
+            printMSG(
+                "debug", "data pre append = {}".format(data.hex()))
+                # "debug", "data pre append = {}".format(data.encode().hex()))
+        except:
+            traceback.print_exc()
+            printMSG(
+                "debug", "data pre append = {}".format(data.encode('hex')))
+            
 
         printMSG('debug', "Outstring = {}".format(data))
         # Assemble the 8th (status) byte
@@ -461,13 +480,23 @@ class ZeusModule(object):
         printMSG("debug", "control byte = {0:b}".format(byte))
         # PAD FRAME WITH ZEROES
         while(len(data) < 7):
-            data += " "
+            # data += " "
+            # data += bytearray(" ".encode('ascii'))
+            data += bytearray([0])
+            print(data)
         # APPEND CONTROL BYTE
-        data += chr(byte)
+        # data+= chr(byte)
+        
+        # data += bytearray(chr(byte).encode('ascii'))        
+        print('byte={} in hex={}'.format(byte, bytearray(byte).hex()))
+        # print(bytearray(chr(byte).encode('ascii')).hex())
+        data += bytearray([byte])
+        # print(data)
+        print('data length = {}, content = {}'.format(len(data), data))
         printMSG(
-            "debug", "data post append = {}".format(data.encode('hex')))
+            "debug", "data post append = {}".format(data.hex())) #encode('hex')))
         msg = can.Message(
-            extended_id=False,
+            is_extended_id=False,
             arbitration_id=self.assembleIdentifier('data'),
             data=data)
         # self.r.setLastTransmitted(msg.data)
@@ -475,11 +504,12 @@ class ZeusModule(object):
             self.CANBus.send(msg)
             #print(Fore.GREEN + "{}".format(msg) + Style.RESET_ALL)
 
-        except can.CanError:
+        except can.exceptions.CanError:
             printMSG("error", "Message not sent!")
 
     def sendCommand(self, cmd):
         data = list(split_by_n(cmd, 7))
+        print(data)
         cmd_len = len(data)
         printMSG(
             "info", "ZeusModule {}: sending packet {} in {} data frame(s)...".format(self.id, cmd, cmd_len))
@@ -488,8 +518,8 @@ class ZeusModule(object):
         self.sendKickFrame()
         for i in range(0, cmd_len):
     #        n = 0
-            # outstring = bytearray(data[i])
-            outstring = data[i]
+            outstring = bytearray(data[i].encode('ascii'))
+            # outstring = data[i]
             for n in range(0, self.transmission_retries):
                 # SEND DATA FRAME
                 self.sendDataObject(i, cmd_len, outstring)
@@ -508,7 +538,11 @@ class ZeusModule(object):
             "info", "ZeusModule {}: initializing CANBus...".format(self.id))
         # can.rc['interface'] = 'socketcan_ctypes'
         # can.rc['channel'] = 'can0'
-        self.CANBus = can.interface.Bus(interface='usb2can')
+        
+        self.CANBus = can.interface.Bus(interface='pcan', channel='PCAN_USBBUS1', bitrate=500000)
+        
+        # self.CANBus = can.interface.Bus(interface='usb2can', channel='can0', can_filters=[{"can_id": 0x01, "can_mask": 0xFF}])
+                                                      #  "can_mask": 0xFF}]) #, channel='can0')
         #  self.CANBus = can.interface.Bus(can_filters=[{"can_id": 0x01,
                                                       #  "can_mask": 0xFF}])
 
