@@ -174,6 +174,7 @@ class remoteFrameListener(can.Listener):
         self.msg_last = can.Message()
 
     def on_message_received(self, msg):
+        print(Fore.GREEN + "{}".format(msg.data) + Style.RESET_ALL)
         # REMOTE FRAME ACTION
         if(msg.is_remote_frame == True):
             #  if((msg.arbitration_id == 0x0000) or (msg.arbitration_id == 0x0020)):
@@ -182,13 +183,13 @@ class remoteFrameListener(can.Listener):
                 self.setRemoteFlag(1)
                 printMSG("info", "Received remote frame with ID = {}, DLC = {}.\n".format(
                     self.parseMsgID(msg.arbitration_id, "s"), msg.dlc))
-                #  print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
+                print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
             return
         
-        # Prevent handler from responding multiple times to same message
-        if(msg == self.msg_last):
-            return
-        self.msg_last = msg
+        # # Prevent handler from responding multiple times to same message
+        # if(msg == self.msg_last):
+        #     return
+        # self.msg_last = msg
 
 
         # KICK FRAME ACTION
@@ -200,18 +201,19 @@ class remoteFrameListener(can.Listener):
             if(self.getKickFlag() == 0):
                 self.setKickFlag(1)
                 printMSG("info", "Received Kick.")
-                #  print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
+                print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
                 if self.parent.auto_response:
                     self.parent.sendRemoteFrame(1)
             return
 
         else:
         # Ignore the messages that we've sent out
-            if self.parseMsgID(msg.arbitration_id, "r") == 1:
-                return
-            print(self.received_msg)
-            print(msg.data)
-            #print(Fore.BLUE + "{}".format(msg) + Style.RESET_ALL)
+            # if self.parseMsgID(msg.arbitration_id, "r") == 1:
+            #     return
+            
+            # print(self.received_msg)
+            # print(msg.data)
+            # print(Fore.BLUE + "{}".format(msg.data) + Style.RESET_ALL)
             if(self.msg_complete_flag == 1):
                 self.received_msg = ""
                 self.msg_complete_flag = 0
@@ -270,10 +272,10 @@ class remoteFrameListener(can.Listener):
             return 0
 
     def msg_is_last(self, msg):
+        printMSG( "info", "msg_is_last: {}, control byte length = {}".format(msg.data, len(msg.data)))
         size = len(msg.data)
         if(size > 0):
-            #  printMSG(
-                #  "warning", "control byte length = {}".format(len(msg.data)))
+            # printMSG( "info", "control byte length = {}".format(len(msg.data)))
             control_byte = msg.data[(len(msg.data) - 1)]
             if((control_byte & EOM_MASK) > 0):
                 return 1
@@ -602,7 +604,12 @@ class ZeusModule(object):
         self.pos = self.maxZPosition
         self.sendCommand(cmd)
 
-    def moveZDrive(self, pos, speed):
+    def moveZDrive(self, pos, preset_speed=None, speed=None):
+        '''
+        pos: 0000-3000 : position of z drive in 0.1mm
+        preset_speed: 'slow' 37 mm/s or 'normal' 350mm/s
+        speed: 0000-3500 : speed of z drive in 0.1mm/s
+        '''
         # cmd = self.cmdHeader('GZ')
         cmd = 'GZ'
         if (pos > self.maxZPosition) or (pos < self.minZPosition):
@@ -610,21 +617,42 @@ class ZeusModule(object):
                 "ZeusModule {}: requested z-position out of range. "
                 " Valid range for z-position is between {} and {}"
                 .format(self.id, self.minZPosition, self.maxZPosition))
-        if (speed == "slow"):
-            speed = 0
-        elif (speed == "fast"):
-            speed = 1
-        else:
-            raise ValueError(
-                "ZeusModule {}: invalid z-axis drive speed specified."
-                    " Accepted values for z-axis drive speed are \'slow\'"
-                    " and \'fast\'.")
-        print(
-            "ZeusModule {}: moving z-drive from position {} to position {}."
-            .format(self.id, self.pos, pos))
-        cmd = cmd + 'gy' + str(pos).zfill(4) + 'gw' + str(speed)
-        self.pos = pos
-        self.sendCommand(cmd)
+            
+        if speed is not None:
+            if (speed <0) or (speed > 3500):
+                raise ValueError(
+                    "ZeusModule {}: invalid z-axis drive speed specified."
+                        " Accepted values are 0-3500")
+            else:
+                print(
+                    "ZeusModule {}: moving z-drive from position {} to position {}."
+                    .format(self.id, self.pos, pos))
+                cmd = cmd + 'gy' + str(pos).zfill(4) + 'zz' + str(speed).zfill(4)
+                self.pos = pos
+                self.sendCommand(cmd)
+                
+                return
+                
+        if preset_speed is not None:
+            if (preset_speed == "slow"):
+                speed = 0
+            elif (preset_speed == "fast"):
+                speed = 1
+            else:
+                raise ValueError(
+                    "ZeusModule {}: invalid z-axis drive speed specified."
+                        " Accepted values for z-axis drive speed are \'slow\'"
+                        " and \'fast\'.")
+            
+            print(
+                "ZeusModule {}: moving z-drive from position {} to position {}."
+                .format(self.id, self.pos, pos))
+            cmd = cmd + 'gy' + str(pos).zfill(4) + 'gw' + str(speed)
+            self.pos = pos
+            self.sendCommand(cmd)
+            
+            return
+    
 
     def pickUpTip(self, tipTypeTableIndex, deckGeometryTableIndex):
         # cmd = self.cmdHeader('GT')
@@ -645,9 +673,18 @@ class ZeusModule(object):
         self.sendCommand(string)
 
     def aspiration(self, aspirationVolume=0, containerGeometryTableIndex=0,
-                   deckGeometryTableIndex=0, liquidClassTableIndex=0, qpm=0,
-                   lld=0, lldSearchPosition=0, liquidSurface=0, mixVolume=0,
-                   mixFlowRate=0, mixCycles=0):
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0, 
+                   qpm=0, lld=0, searchBottomMode=0, 
+                   lldSearchPosition=0, liquidSurface=0, mixVolume=0,
+                   mixFlowRate=0, mixCycles=0, mixZMinHeight=0, mixDelay=0, 
+                   zMoveForce=12, clotDetectHeight=0, surfaceFollowing=0, 
+                   immersionDepth=0, fixedHeight=0
+                   ):
+        '''
+            lld: 0: off default, 1: on
+            searchBottomMode: 0: off default, 1: on
+            surfaceFollowing: 0: on default, 1: off
+        '''
         # cmd = self.cmdHeader('GA')
         cmd = 'GA'
         cmd = cmd + 'ai' + str(aspirationVolume).zfill(5) +\
@@ -656,11 +693,36 @@ class ZeusModule(object):
             'lq' + str(liquidClassTableIndex).zfill(2) +\
             'gq' + str(qpm) +\
             'lb' + str(lld) +\
+            'zn' + str(searchBottomMode) +\
             'zp' + str(lldSearchPosition).zfill(4) +\
             'cf' + str(liquidSurface).zfill(4) +\
             'ma' + str(mixVolume).zfill(5) +\
             'mb' + str(mixFlowRate).zfill(5) +\
-            'dn' + str(mixCycles).zfill(2)
+            'dn' + str(mixCycles).zfill(2) +\
+            'yi' + str(mixZMinHeight).zfill(4) +\
+            'ap' + str(mixDelay).zfill(4) +\
+            'yw' + str(zMoveForce).zfill(2) +\
+            'cg' + str(clotDetectHeight).zfill(4) +\
+            'sf' + str(surfaceFollowing) +\
+            'ie' + str(immersionDepth).zfill(4) +\
+            'yr' + str(fixedHeight).zfill(4)
+        self.sendCommand(cmd)
+        
+    def aspirate_lld(self, aspirationVolume=0, containerGeometryTableIndex=0,
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0
+                   ):
+        '''
+            lld: 0: off default, 1: on
+            searchBottomMode: 0: off default, 1: on
+            surfaceFollowing: 0: on default, 1: off
+        '''
+        # cmd = self.cmdHeader('GA')
+        cmd = 'GA'
+        cmd = cmd + 'ai' + str(aspirationVolume).zfill(5) +\
+            'ge' + str(containerGeometryTableIndex).zfill(2) +\
+            'go' + str(deckGeometryTableIndex).zfill(2) +\
+            'lq' + str(liquidClassTableIndex).zfill(2) +\
+            'lb1zp1000'
         self.sendCommand(cmd)
 
     def dispensing(self, dispensingVolume=0, containerGeometryTableIndex=0,
@@ -715,7 +777,8 @@ class ZeusModule(object):
 
     def getFirmwareVersion(self):
         # cmd = self.cmdHeader('RF')
-        self.sendCommand("RFid")
+        # self.sendCommand("RFid")
+        self.sendCommand("RF")
         # self.sendCommand(cmd)
 
     def getParameterValue(self, parameterName):
@@ -927,7 +990,7 @@ class ZeusModule(object):
         
         self.sendCommand(cmd)
     
-    def bottomSearch(self, start, stop):
+    def bottomSearch(self, start=600, stop=1000):
         # '01SBsa1700sb2500'
         cmd = 'SB'
         cmd += 'sa' + str(start).zfill(4) + \
@@ -1151,3 +1214,4 @@ class ZeusModule(object):
                 return defaultError
         else:
             return "Error code returned '{}' corresponds to unknown command.".format(errorString)
+        
