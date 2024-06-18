@@ -173,8 +173,8 @@ class remoteFrameListener(can.Listener):
         self.kfMutex = Lock()
         self.msg_last = can.Message()
 
-    def on_message_received(self, msg):
-        print(Fore.GREEN + "{}".format(msg.data) + Style.RESET_ALL)
+    def on_message_received(self, msg):        
+        print(Fore.GREEN + "on_message_received: msg.data={} msg.arbitration_id={} msg.is_remote_frame={}".format(msg.data, msg.arbitration_id, msg.is_remote_frame) + Style.RESET_ALL)
         # REMOTE FRAME ACTION
         if(msg.is_remote_frame == True):
             #  if((msg.arbitration_id == 0x0000) or (msg.arbitration_id == 0x0020)):
@@ -218,8 +218,9 @@ class remoteFrameListener(can.Listener):
                 self.received_msg = ""
                 self.msg_complete_flag = 0
 
-            #self.received_msg += msg.data.replace(" ", "")[:-1]
-            self.received_msg += str(msg.data).replace(" ", "")
+            print(msg.data)
+            self.received_msg += msg.data[:-1].decode('ascii').replace(" ", "")
+            # self.received_msg += msg.data[:7].replace("\x00", "").decode('ascii')
 
             if(self.msg_is_last(msg) == 0):
                 if self.parent.auto_response:
@@ -272,12 +273,13 @@ class remoteFrameListener(can.Listener):
             return 0
 
     def msg_is_last(self, msg):
-        printMSG( "info", "msg_is_last: {}, control byte length = {}".format(msg.data, len(msg.data)))
+        printMSG( "info", "msg_is_last: {}, msg length = {}".format(msg.data, len(msg.data)))
         size = len(msg.data)
         if(size > 0):
-            # printMSG( "info", "control byte length = {}".format(len(msg.data)))
             control_byte = msg.data[(len(msg.data) - 1)]
+            printMSG( "info", "control byte = {0:b}".format(control_byte))
             if((control_byte & EOM_MASK) > 0):
+                printMSG( "info", "control byte has EOM")
                 return 1
 
         return 0
@@ -367,7 +369,7 @@ class ZeusModule(object):
             "85": "No communication to the digital potentiometer.",
     }
 
-    def __init__(self, id=None, init_module=True, auto_response=True):
+    def __init__(self, id=None, init_module=True, discard_tip=False, auto_response=True):
         # colorama.init()
         init()
         self.id = id
@@ -383,8 +385,13 @@ class ZeusModule(object):
         self.pos = 0
         self.minZPosition = 0
         self.maxZPosition = 2500
+        
+        print_listener = can.Printer()
+        # can.Notifier(self.CANBus, [print_listener])
         self.r = remoteFrameListener(self)
-        self.remoteFrameNotifier = can.Notifier(self.CANBus, [self.r])
+        self.remoteFrameNotifier = can.Notifier(self.CANBus, [self.r, print_listener])
+        
+        
         # print("ZeusModule {}: initializing...".format(self.id))
         logging.info("ZeusModule {}: initializing...".format(self.id))
         # cmd = self.cmdHeader('RF')
@@ -394,7 +401,7 @@ class ZeusModule(object):
         if init_module:
             self.initZDrive()
             sleep(1.0)
-            self.initDosingDrive(discard_tip=False)
+            self.initDosingDrive(discard_tip=discard_tip)
             sleep(1.0)
 
     def setAutoResponse(self, auto):
@@ -471,14 +478,14 @@ class ZeusModule(object):
 
     def waitForKickFrame(self):
         # WAIT FOR REMOTE RESPONSE
-        # sleep(self.remote_timeout)
+        sleep(self.remote_timeout)
         s = time.time()
         c = time.time()
         # LOOP HERE UNTIL TIMEOUT EXPIRES
         while ((c - s) < self.remote_timeout):
             c = time.time()
             if(self.r.kick_received() == 1):
-                #  printMSG("debug", "ACK Received.")
+                printMSG("debug", "ACK Received.")
                 return 1
 
         return 0
