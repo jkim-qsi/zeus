@@ -25,11 +25,15 @@ class Snapmaker(object):
     
     def home_motors(self):
         print('Homing motors')
-        self.ser.write('G28\r'.encode('ascii'))
-        # received = self.ser.read_until(size=5) #expected='!', size=10)
-        # print(received)
-        
+        print(' Home Z first to prevent collisions')
+        self.ser.write('G28 Z\r'.encode('ascii'))
         sleep(5.0)
+        print(' Home XY')
+        self.ser.write('G28 X Y\r'.encode('ascii'))
+        sleep(5.0)
+        # received = self.ser.read_until(size=5) #expected='!', size=10)
+        # print(received)       
+        
         
         received = self.ser.read() #size=6) #expected='!', size=10)
         print(received)

@@ -6,7 +6,7 @@ from time import sleep
 
 # os.add_dll_directory(R"C:\Users\Lab\Downloads\usb2can_canal_v2.0.0\usb2can_canal_v2.0.0\x64\Release")
 
-zm = zeus.ZeusModule(1, init_module=False) # 1 is set by the jumper on the Zeus X1 module
+zm = zeus.ZeusModule(1, init_module=True, discard_tip=False) # 1 is set by the jumper on the Zeus X1 module
 
 deck = zeus.DeckGeometry(index=0, endTraversePosition=600, beginningofTipPickingPosition=1100, positionofTipDepositProcess=1200)
 water_container = zeus.ContainerGeometry(index=0, diameter=200, bottomSection=10000, bottomPosition=1800, immersionDepth=20)
