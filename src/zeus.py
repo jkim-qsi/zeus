@@ -233,6 +233,8 @@ class remoteFrameListener(can.Listener):
                     #  self.parent.sendRemoteFrame(8)
 
                 ret = self.parent.parseErrors(self.received_msg)
+                # Reset kick flag
+                self.setKickFlag(0)
                 if(ret != "NONE"):
                     printMSG("error", "{}".format(ret))
                     return ret
