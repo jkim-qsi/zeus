@@ -14,10 +14,12 @@ sm.flush_input_buffer()
 
 # Initialize pipette head
 zm = zeus.ZeusModule(1, init_module=True, discard_tip=False) # 1 is set by the jumper on the Zeus X1 module
-
-deck = zeus.DeckGeometry(index=0, endTraversePosition=600, beginningofTipPickingPosition=1800, positionofTipDepositProcess=1800)
+#%%
+deck = zeus.DeckGeometry(index=0, endTraversePosition=600, beginningofTipPickingPosition=1700, positionofTipDepositProcess=1700)
+zm.setDeckGeometryParameters(deck)
+#%%
 water_container = zeus.ContainerGeometry(index=0, diameter=200, bottomSection=10000, bottomPosition=1550, immersionDepth=20)
-
+#%%
 # Liquid class 23 for 300uL clear tip with filter
 lc_water_300uL = zeus.LiquidClass(index=23, liquidClassForFilterTips=1, \
                                   aspirationMode=0, aspirationFlowRate=500, aspirationSwapSpeed=1000, aspirationSettlingTime=10, \
@@ -28,16 +30,63 @@ cc_water_300uL_aspirate = zeus.calibrationCurve(index=lc_water_300uL.index, dire
 cc_water_300uL_dispense = zeus.calibrationCurve(index=lc_water_300uL.index, direction='dispense')
 
 
+#%%
 
-# Pipette tip tray 0,0 position
-input('Press any key to pickup tip')
-sm.move((86.3, 193.1, 87))
-sleep(1.0)
+# zm.moveZDrive(1500, speed=400)
+
+#%%
+sm_z = 195
+sm_y = 193
+sm_x = {
+    'tip_pickup': 5,
+    'over_scale': 115,
+    }
+#%%
+
+# Pipette tip tray 
+# input('Press any key to pickup tip')
+sm.move((sm_x['tip_pickup'], sm_y, sm_z))
+#%%
+
+# sleep(1.0)
 zm.pickUpTip(5, 0) # tip type 5: 300uL conductive filtered)
 
+#%%
+zm_z = {
+    'travel': 1000,
+    'surface': 2250,
+    'aspirate': 2255,
+    'dispense': 2250
+}
+zm_speed = 400
+#%%
 # water container position
-# sm.move((83.3, 143.1, 87))
+sm.move((sm_x['over_scale'], sm_y, sm_z))
 
+#%%
+zm.moveZDrive(zm_z['aspirate'], speed=zm_speed)
+sleep(5.0)
+#%%
+zm.simpleAspirate(volume=1000)
+# sleep(5.0)
+#%%
+zm.moveZDrive(zm_z['dispense'], speed=zm_speed)
+
+#%%
+zm.moveZDrive(zm_z['travel'], speed=zm_speed)
+
+#%%
+volume = 50
+# zm.moveZDrive(zm_z['dispense'], speed=zm_speed)
+
+zm.simpleDispense(volume=volume)
+#%%
+
+#%%
+zm.simpleDispense(volume=290)
+
+#%%
+#%%
 # # 2mL Vial rack 0,0 position
 # liquid_level = 1550
 # liquid_volume = 30 # uL
