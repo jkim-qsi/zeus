@@ -7,6 +7,7 @@ from colorama import init, Fore, Back, Style
 from threading import Thread, Lock
 import sys
 import traceback
+import re
 
 
 DEBUG = 1
@@ -105,7 +106,7 @@ class LiquidClass(object):
     def __init__(self, id=0, index=None, liquidClassForFilterTips=0,
                  aspirationMode=0, aspirationFlowRate=0, overAspiratedVolume=0,
                  aspirationTransportVolume=0, blowoutAirVolume=0, aspirationSwapSpeed=0,
-                 aspirationSettlingTime=0, lld=0, clldSensitivity=0, plldSensitivity=0,
+                 aspirationSettlingTime=0, lld=0, clldSensitivity=1, plldSensitivity=1,
                  adc=0, dispensingMode=0, dispensingFlowRate=0, stopFlowRate=0,
                  stopBackVolume=0, dispensingTransportVolume=0, acceleration=0,
                  dispensingSwapSpeed=0, dispensingSettlingTime=0, flowRateTransportVolume=0):
@@ -328,6 +329,7 @@ class ZeusModule(object):
     CANBus = None
     transmission_retries = 5
     remote_timeout = 1
+    liquid_level = -1
     errorTable = {
         "20": "No communication to EEPROM.",
             "30": "Undefined command.",
@@ -695,6 +697,8 @@ class ZeusModule(object):
             searchBottomMode: 0: off default, 1: on
             surfaceFollowing: 0: on default, 1: off
         '''
+        print('TODO')
+        pass
         # cmd = self.cmdHeader('GA')
         cmd = 'GA'
         cmd = cmd + 'ai' + str(aspirationVolume).zfill(5) +\
@@ -719,7 +723,8 @@ class ZeusModule(object):
         self.sendCommand(cmd)
         
     def aspirate_lld(self, aspirationVolume=0, containerGeometryTableIndex=0,
-                   deckGeometryTableIndex=0, liquidClassTableIndex=0
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0, 
+                   lldSearchPosition=1000
                    ):
         '''
             lld: 0: off default, 1: on
@@ -732,16 +737,20 @@ class ZeusModule(object):
             'ge' + str(containerGeometryTableIndex).zfill(2) +\
             'go' + str(deckGeometryTableIndex).zfill(2) +\
             'lq' + str(liquidClassTableIndex).zfill(2) +\
-            'lb1zp1000'
+            'lb' + str(1) +\
+            'zp' + str(lldSearchPosition).zfill(4)
         self.sendCommand(cmd)
 
     def dispensing(self, dispensingVolume=0, containerGeometryTableIndex=0,
                    deckGeometryTableIndex=0, qpm=0, liquidClassTableIndex=0,
                    lld=0, lldSearchPosition=0, liquidSurface=0,
                    searchBottomMode=0, mixVolume=0, mixFlowRate=0, mixCycles=0):
+    
+        print('TODO')
+        pass
         # cmd = self.cmdHeader('GD')
         cmd = 'GD'
-        cmd = cmd + 'di' + str(dispensingVolume).zfill(4) +\
+        cmd = cmd + 'di' + str(dispensingVolume).zfill(5) +\
             'ge' + str(containerGeometryTableIndex).zfill(2) +\
             'go' + str(deckGeometryTableIndex).zfill(2) +\
             'gq' + str(qpm) +\
@@ -754,12 +763,27 @@ class ZeusModule(object):
             'mb' + str(mixFlowRate).zfill(5) +\
             'dn' + str(mixCycles).zfill(2)
         self.sendCommand(cmd)
-
+        
     # Not available on Zeus X1
     # def switchOff(self):
     #     # cmd = self.cmdHeader('AV')
     #     cmd = 'AV'
     #     self.sendCommand(cmd)
+
+        
+    def dispense_lld(self, dispensingVolume=0, containerGeometryTableIndex=0,
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0,
+                   lldSearchPosition=0):
+        # cmd = self.cmdHeader('GD')
+        cmd = 'GD'
+        cmd = cmd + 'di' + str(dispensingVolume).zfill(5) +\
+            'ge' + str(containerGeometryTableIndex).zfill(2) +\
+            'go' + str(deckGeometryTableIndex).zfill(2) +\
+            'gq' + str(0) +\
+            'lq' + str(liquidClassTableIndex).zfill(2) +\
+            'lb' + str(1) +\
+            'zp' + str(lldSearchPosition).zfill(4)
+        self.sendCommand(cmd)
 
     def calculateContainerVolume(self, containerGeometryTableIndex=0,
                                  deckGeometryTableIndex=0,
@@ -1048,14 +1072,26 @@ class ZeusModule(object):
             # ""))) + Style.RESET_ALL)
 
         cmd = str(errorString[:2])
-        # print("cmd = {}".format(cmd))
+        print("cmd = {}".format(cmd))
         eidx = errorString.find("er")
         if(eidx == -1):
+            print('no error found in return message')
             return "NONE"
 
         ec = str(errorString[(eidx + 2): (eidx + 4)])
         if ec == '00':
             # NO ERROR
+            if cmd == 'GA':
+                print('Parsing liquid level')
+                # Parse liquid level
+                eidx = errorString.find("yl")
+                if eidx != -1:                    
+                    self.liquid_level = int(errorString[eidx+2:eidx+6])
+                    print('Aspirate: Liquid level at {}'.format(self.liquid_level))
+                else:
+                    print('Aspirate: Liquid level not found.')
+            
+            
             return
         #  print(Fore.MAGENTA + "DEBUG: ec = {}".format(ec))
 
