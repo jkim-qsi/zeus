@@ -401,10 +401,11 @@ class ZeusModule(object):
         # print(cmd)
         # self.sendCommand(cmd)
         if init_module:
-            self.initZDrive()
-            sleep(1.0)
             self.initDosingDrive(discard_tip=discard_tip)
             sleep(1.0)
+            self.initZDrive()
+            sleep(1.0)
+            
 
     def setAutoResponse(self, auto):
         self.auto_response = auto
