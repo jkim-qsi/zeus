@@ -48,10 +48,12 @@ class CitizenScale(object):
             if sign == '-':
                 value *= -1
                         
-            print(value)
-            print(unit)
-        
-        return value, unit
+            # print(value)
+            # print(unit)
+                
+            return value, unit
+        else:
+            return -1, -1
     
     def flush_input_buffer(self):
                 

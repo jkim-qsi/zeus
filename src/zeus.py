@@ -737,8 +737,30 @@ class ZeusModule(object):
             'ge' + str(containerGeometryTableIndex).zfill(2) +\
             'go' + str(deckGeometryTableIndex).zfill(2) +\
             'lq' + str(liquidClassTableIndex).zfill(2) +\
+            'gq' + str(0) +\
             'lb' + str(1) +\
             'zp' + str(lldSearchPosition).zfill(4)
+        self.sendCommand(cmd)
+        
+    def aspirate_at(self, aspirationVolume=0, containerGeometryTableIndex=0,
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0, 
+                   liquidSurface=1000
+                   ):
+        '''
+            lld: 0: off default, 1: on
+            searchBottomMode: 0: off default, 1: on
+            surfaceFollowing: 0: on default, 1: off
+        '''
+        # cmd = self.cmdHeader('GA')
+        cmd = 'GA'
+        cmd = cmd + 'ai' + str(aspirationVolume).zfill(5) +\
+            'ge' + str(containerGeometryTableIndex).zfill(2) +\
+            'go' + str(deckGeometryTableIndex).zfill(2) +\
+            'lq' + str(liquidClassTableIndex).zfill(2) +\
+            'gq' + str(0) +\
+            'lb' + str(0) +\
+            'zn' + str(0) +\
+            'cf' + str(liquidSurface).zfill(4)
         self.sendCommand(cmd)
 
     def dispensing(self, dispensingVolume=0, containerGeometryTableIndex=0,
@@ -770,6 +792,21 @@ class ZeusModule(object):
     #     cmd = 'AV'
     #     self.sendCommand(cmd)
 
+    def clear_tip(self, dispensingVolume=0, containerGeometryTableIndex=0,
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0,
+                   dispenseHeight=1000, dispenseForce=12):
+        # cmd = self.cmdHeader('GD')
+        cmd = 'GD'
+        cmd = cmd + 'di' + str(dispensingVolume).zfill(5) +\
+            'ge' + str(containerGeometryTableIndex).zfill(2) +\
+            'go' + str(deckGeometryTableIndex).zfill(2) +\
+            'gq' + str(0) +\
+            'lq' + str(liquidClassTableIndex).zfill(2) +\
+            'lb' + str(0) +\
+            'cf' + str(dispenseHeight).zfill(4) +\
+            'zm' + str(0) +\
+            'yw' + str(12)
+        self.sendCommand(cmd)
         
     def dispense_lld(self, dispensingVolume=0, containerGeometryTableIndex=0,
                    deckGeometryTableIndex=0, liquidClassTableIndex=0,
