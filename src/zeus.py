@@ -329,7 +329,12 @@ class ZeusModule(object):
     CANBus = None
     transmission_retries = 5
     remote_timeout = 1
+    response_timeout = 3.0
+    
+    # Status parameters
     liquid_level = -1
+    dispense_position = -1    
+    
     errorTable = {
         "20": "No communication to EEPROM.",
             "30": "Undefined command.",
@@ -665,6 +670,24 @@ class ZeusModule(object):
             
             return
     
+    # def sensor_status(self):
+    def dispensePosition(self):
+        self.dispense_position = -1
+        self.sendCommand('RD')
+        
+        # sleep(self.remote_timeout)
+        s = time.time()
+        c = time.time()
+        # LOOP HERE UNTIL TIMEOUT EXPIRES
+        while ((c - s) < self.response_timeout):
+            sleep(0.1)
+            
+            c = time.time()
+            if self.dispense_position != -1:
+                return self.dispense_position
+
+        return -1        
+        
 
     def pickUpTip(self, tipTypeTableIndex, deckGeometryTableIndex):
         # cmd = self.cmdHeader('GT')
@@ -784,6 +807,22 @@ class ZeusModule(object):
             'ma' + str(mixVolume).zfill(5) +\
             'mb' + str(mixFlowRate).zfill(5) +\
             'dn' + str(mixCycles).zfill(2)
+        self.sendCommand(cmd)
+        
+    def dispense_at(self, dispensingVolume=0, containerGeometryTableIndex=0,
+                   deckGeometryTableIndex=0, liquidClassTableIndex=0,
+                   dispenseHeight=0):
+    
+        cmd = 'GD'
+        cmd = cmd + 'di' + str(dispensingVolume).zfill(5) +\
+            'ge' + str(containerGeometryTableIndex).zfill(2) +\
+            'go' + str(deckGeometryTableIndex).zfill(2) +\
+            'gq' + str(0) +\
+            'lq' + str(liquidClassTableIndex).zfill(2) +\
+            'lb' + str(0) +\
+            'cf' + str(dispenseHeight).zfill(4) +\
+            'zm' + str(0) +\
+            'yw' + str(12)
         self.sendCommand(cmd)
         
     # Not available on Zeus X1
@@ -1119,7 +1158,7 @@ class ZeusModule(object):
         if ec == '00':
             # NO ERROR
             if cmd == 'GA':
-                print('Parsing liquid level')
+                print('GA: Parsing liquid level')
                 # Parse liquid level
                 eidx = errorString.find("yl")
                 if eidx != -1:                    
@@ -1127,7 +1166,15 @@ class ZeusModule(object):
                     print('Aspirate: Liquid level at {}'.format(self.liquid_level))
                 else:
                     print('Aspirate: Liquid level not found.')
-            
+            elif cmd == 'RD':
+                print('RD: Parsing dispense position')
+                
+                eidx = errorString.find("di")
+                if eidx != -1:                    
+                    self.dispense_position = int(errorString[eidx+2:eidx+7])
+                    print('RD: dispense position at {}'.format(self.dispense_position))
+                else:
+                    print('RD: dispense position not found.')
             
             return
         #  print(Fore.MAGENTA + "DEBUG: ec = {}".format(ec))
