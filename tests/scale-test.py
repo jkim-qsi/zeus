@@ -8,6 +8,7 @@ from time import sleep
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import traceback
 
 #%%
 
@@ -30,16 +31,26 @@ zm.setDeckGeometryParameters(deck)
 # zm.setContainerGeometryParameters(water_container)
 #%%
 # container for scale
-water_container = zeus.ContainerGeometry(index=1, diameter=200, bottomSection=10000, bottomPosition=2050, immersionDepth=20)
+water_container = zeus.ContainerGeometry(index=1, diameter=200, bottomSection=10000, bottomPosition=2200, immersionDepth=20)
 zm.setContainerGeometryParameters(water_container)
 
 #%%
 # Liquid class 23 for 300uL clear tip with filter
-lc_water_300uL = zeus.LiquidClass(index=23, liquidClassForFilterTips=1, \
+lc_water_300uL_empty = zeus.LiquidClass(index=23, liquidClassForFilterTips=1, \
                                   aspirationMode=0, aspirationFlowRate=500, aspirationSwapSpeed=1000, aspirationSettlingTime=20, \
                                   lld=1, clldSensitivity=1, plldSensitivity=2, \
                                   dispensingMode=0, dispensingFlowRate=500, stopFlowRate=500, dispensingSettlingTime=10, \
                                   blowoutAirVolume=1500,
+                                  )
+zm.setLiquidClassParameters(lc_water_300uL_empty)
+
+#%%
+# Liquid class 24 for 300uL clear tip with filter
+lc_water_300uL = zeus.LiquidClass(index=24, liquidClassForFilterTips=1, \
+                                  aspirationMode=0, aspirationFlowRate=500, aspirationSwapSpeed=1000, aspirationSettlingTime=20, \
+                                  lld=1, clldSensitivity=1, plldSensitivity=2, \
+                                  dispensingMode=3, dispensingFlowRate=500, stopFlowRate=500, dispensingSettlingTime=5, \
+                                  blowoutAirVolume=0,
                                   )
 zm.setLiquidClassParameters(lc_water_300uL)
 #%%
@@ -63,12 +74,17 @@ zm.setCalibrationCurveParameters(cc_water_300uL_aspirate_cal)
 # cc_water_300uL_dispense = zeus.calibrationCurve(index=lc_water_300uL.index, direction='dispense')
 # zm.setCalibrationCurveParameters(cc_water_300uL_dispense)
 
-# default for calibrationf
-cc_water_300uL_dispense_forcal = zeus.calibrationCurve(index=lc_water_300uL.index, direction='dispense', \
-                                                target_volumes =  [0, 50, 100, 200, 500, 1000, 2000, 3000], \
-                                                actual_volumes = [0, 50, 100, 200, 500, 1000, 2000, 3000])
-zm.setCalibrationCurveParameters(cc_water_300uL_dispense_forcal)
+# # default for calibrationf
+# cc_water_300uL_dispense_forcal = zeus.calibrationCurve(index=lc_water_300uL.index, direction='dispense', \
+#                                                 target_volumes =  [0, 50, 100, 200, 500, 1000, 2000, 3000], \
+#                                                 actual_volumes = [0, 50, 100, 200, 500, 1000, 2000, 3000])
+# zm.setCalibrationCurveParameters(cc_water_300uL_dispense_forcal)
 
+# Calibrated on 6/23/2024
+cc_water_300uL_dispense_cal = zeus.calibrationCurve(index=lc_water_300uL.index, direction='dispense', \
+                                                target_volumes =  [0, 50, 100, 250, 500, 1250, 2000, 3000], \
+                                                actual_volumes = [0, 44, 94, 240, 486, 1207, 1951, 2942])
+zm.setCalibrationCurveParameters(cc_water_300uL_dispense_cal)
 
 
 #%%
@@ -210,7 +226,7 @@ for rep in range(repeat):
     
 # print(cal_data)
 print(np.mean(cal_data))
-
+print('Finished aspiration measurement')
 
 #%%
     # zm.simpleDispense(asp_volume)
@@ -220,10 +236,10 @@ print(np.mean(cal_data))
 #%%
 
 ###### Cell for calibrating dispense
-eval_volume = 250
+eval_volume = 50
 
-asp_volume = 3000
-repeat = 11
+asp_volume = 3000 + 40
+repeat = 2
 cal_data = []
 zm_speed_dis = 1300
 
@@ -275,14 +291,22 @@ for rep in range(repeat):
     sleep(2.0)
     
     dis_flowrate = 500
-    dis_time = eval_volume / disp_flowrate + 3.0
-    zm.simpleDispense(volume=eval_volume, flowrate=dis_flowrate)
-    remain_vol -= eval_volume
+    dis_time = eval_volume / disp_flowrate + 5.0
+    
+    zm.clear_tip(dispensingVolume=5, containerGeometryTableIndex=water_container.index,
+                    deckGeometryTableIndex=deck.index, liquidClassTableIndex=lc_water_300uL.index,
+                    dispenseHeight=dispense_z)
+    
+    # zm.simpleDispense(volume=eval_volume, flowrate=dis_flowrate)
+    # sleep(dis_time)
+    
+    # remain_vol -= eval_volume    
+    # zm.moveZDrive(dispense_z-100, speed=zm_speed_dis)
+    
+    # sleep(1.0)    
     
     sleep(dis_time)
-    zm.moveZDrive(dispense_z-100, speed=zm_speed_dis)
-    
-    sleep(1.0)    
+    display('Dispensed')
     
     data = []
     for sample in range(10):    
@@ -295,7 +319,7 @@ for rep in range(repeat):
 
     print(data)
     data_arr = np.array(data)
-    cal_data.append(np.mean(data_arr[data_arr > eval_volume/10/2]))
+    cal_data.append(np.mean(data_arr[data_arr > eval_volume/10 * 0.8]))
     # print(cal_data[-1])
 
     fig, ax = plt.subplots()
@@ -305,7 +329,10 @@ for rep in range(repeat):
     plt.show()
     
     df =pd.DataFrame({'data': cal_data}) 
-    df.to_clipboard(index=False)
+    try:
+        df.to_clipboard(index=False)
+    except:
+        traceback.print_exc()
     display(df)
     
 
@@ -313,6 +340,9 @@ zm.moveZDrive(1500, speed=zm_speed_dis)
 sleep(2.0)
 zm.simpleDispense(volume=remain_vol)
 sleep(2.0)
+
+
+print('Finished dispense measurement')
     
 
 
