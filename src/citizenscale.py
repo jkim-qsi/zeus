@@ -31,11 +31,12 @@ class CitizenScale(object):
             print('Tare successful.')
             return 0
     
-    def measure(self):
+    def measure(self, verbose=False):
         self.ser.write('[W]\r'.encode('ascii'))
         
         received = self.ser.read_until(expected='\r') #expected='!', size=10)
-        print(received)
+        if verbose:
+            print(received)
         
         match = re.search('\s+([-+])\s+([\d.]+) ([a-zA-Z]+)', str(received))
         
